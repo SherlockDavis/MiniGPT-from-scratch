@@ -61,7 +61,7 @@
 
 ```bash
 # 1. 克隆 + 装依赖
-git clone https://github.com/<your-username>/MiniGPT-from-scratch.git
+git clone https://github.com/SherlockDavis/MiniGPT-from-scratch.git
 cd MiniGPT-from-scratch
 pip install -r requirements.txt
 
