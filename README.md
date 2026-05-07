@@ -16,7 +16,7 @@
 ## ✨ 亮点
 
 - 🔧 **真·从零** —— 拒绝 `nn.MultiheadAttention` / `transformers`，手写 LayerNorm / Causal Self-Attention / MLP / Block / GPT
-- ⚡ **快速收敛** —— 10000 步训练，**val PPL ≈ 4.7**（本地 RTX 3060 ~83 min；Colab 免费 T4 ~2 h，见[训练时间脚注](#%EF%B8%8F-训练时间脚注)）
+- ⚡ **快速收敛** —— 10000 步训练，**val PPL ≈ 4.7**（本地 RTX 3060 ~83 min；Colab 免费 T4 ~90 min 实测，见[训练时间脚注](#%EF%B8%8F-训练时间脚注)）
 - 📦 **代码精简** —— `model.py` 不到 200 行，全项目核心 < 1000 行
 - 🎬 **真的能写故事** —— 见下方实测样本，"Once upon a time, there was a little girl named Lily..."
 - 📊 **生产级训练栈** —— FP16 混合精度 + 梯度累积 + cosine LR schedule（wandb 监控可选，默认开启）
@@ -47,7 +47,7 @@
 | Train loss (final) | 1.60 |
 | Val loss (final) | 1.55 |
 | **Val perplexity** | **≈ 4.73** |
-| 训练时间 | 83 min（本地 RTX 3060，batch=64，FP16 AMP）/ ~2 h（Colab 免费 T4，见脚注）|
+| 训练时间 | 83 min（本地 RTX 3060，batch=64，FP16 AMP）/ ~90 min（Colab 免费 T4 实测，见脚注）|
 | 训练步数 | 10000 |
 | 有效 batch size | 64 × 256 tokens = 16384 tokens/step |
 
@@ -57,12 +57,12 @@
 
 README 头部 **83 min** 是在**本地 RTX 3060**（12 GB VRAM）上用默认 `batch_size=64` 实测得到的。**Colab 免费 T4** 实际可用 VRAM 只有 ~14.5 GB（不是标称的 16 GB），但 LM-head 输出 `(64, 256, 50257)` 加上 cross-entropy 内部的 fp32 副本就要 ~3 GB——叠加模型权重、优化器状态和激活值，在 Colab 的更高 PyTorch / CUDA context 开销下会 OOM。
 
-**Colab 友好做法**：用 `--batch-size 16 --grad-accum-steps 4`，**effective batch 仍为 64**（4 × 16），训练动力学和最终 PPL 完全一致；只是因为梯度累积循环的额外开销，wall-clock 变成 ~2 h 而不是 83 min。Notebook 默认就用这套配置，无需手动加参数。
+**Colab 友好做法**：用 `--batch-size 16 --grad-accum-steps 4`，**effective batch 仍为 64**（4 × 16），训练动力学和最终 PPL 完全一致——实测 val PPL ≈ 4.83，与本地 4.73 几乎相同。原本担心梯度累积循环会让 wall clock 翻倍，实测**只比本地慢 ~10%**（91 min vs 83 min）。Notebook 默认就用这套配置，无需手动加参数。
 
-| 环境 | 推荐配置 | 实测时间 |
-|------|----------|----------|
-| 本地 RTX 3060（12 GB）| 默认（batch=64）| ~83 min |
-| **Colab 免费 T4** | `--batch-size 16 --grad-accum-steps 4` | **~2 h** |
+| 环境 | 推荐配置 | 实测时间 | 实测 val PPL |
+|------|----------|----------|--------------|
+| 本地 RTX 3060（12 GB）| 默认（batch=64）| ~83 min | 4.73 |
+| **Colab 免费 T4** | `--batch-size 16 --grad-accum-steps 4` | **~90 min** | **4.83** |
 
 ---
 
@@ -92,7 +92,7 @@ python generate.py --checkpoint checkpoints/ckpt_step10000.pt \
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SherlockDavis/MiniGPT-from-scratch/blob/main/MiniGPT.ipynb)
 
-点上面的徽章在 Colab 里打开 [`MiniGPT.ipynb`](./MiniGPT.ipynb) → Runtime → Change runtime type → T4 GPU → Run all。Notebook 已自动配置 Colab 安全 batch（~2 h 跑完，详见[训练时间脚注](#%EF%B8%8F-训练时间脚注)）。
+点上面的徽章在 Colab 里打开 [`MiniGPT.ipynb`](./MiniGPT.ipynb) → Runtime → Change runtime type → T4 GPU → Run all。Notebook 已自动配置 Colab 安全 batch（实测 ~90 min 跑完，详见[训练时间脚注](#%EF%B8%8F-训练时间脚注)）。
 
 ### 显存不够？
 
