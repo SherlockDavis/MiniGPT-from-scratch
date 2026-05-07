@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
-[![Colab](https://img.shields.io/badge/Open%20in-Colab-F9AB00?logo=google-colab&logoColor=white)](./MiniGPT.ipynb)
+[![Colab](https://img.shields.io/badge/Open%20in-Colab-F9AB00?logo=google-colab&logoColor=white)](https://colab.research.google.com/github/SherlockDavis/MiniGPT-from-scratch/blob/main/MiniGPT.ipynb)
 
 </div>
 
@@ -79,7 +79,9 @@ python generate.py --checkpoint checkpoints/ckpt_step10000.pt \
 
 ### Google Colab 一键运行
 
-打开 [`MiniGPT.ipynb`](./MiniGPT.ipynb) → Runtime → Change runtime type → T4 GPU → Run all。
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SherlockDavis/MiniGPT-from-scratch/blob/main/MiniGPT.ipynb)
+
+点上面的徽章在 Colab 里打开 [`MiniGPT.ipynb`](./MiniGPT.ipynb) → Runtime → Change runtime type → T4 GPU → Run all。
 
 ### 显存不够？
 
