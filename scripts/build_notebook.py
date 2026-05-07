@@ -98,28 +98,34 @@ The script downloads `TinyStoriesV2-GPT4-train.txt` (~2 GB) and `TinyStoriesV2-G
 >
 > If you already interrupted a previous run, the `.bin` files may be partially written and corrupt. Clear them with the recovery cell right below before retrying.
 
+> 💡 **Why `--batch-size 16 --grad-accum-steps 4`?** Colab's free T4 has ~14.5 GB usable VRAM (not the nominal 16 GB), and our default `batch_size=64` blows past that on the LM-head logits tensor `(64, 256, 50257)` ≈ 3 GB plus its fp32 cross-entropy intermediate. With batch 16 + 4-way gradient accumulation, the **effective** batch stays at 64 and training dynamics are identical, but peak VRAM drops by ~4×.
+
 Watch for:
 - After tokenization: `loss` drops from ~11 (random init) toward ~7 within 100 steps
 - No `Non-finite loss` errors
-- Step time around 0.5 s on T4
+- Step time around 1–2 s on T4 (slower per step than batch=64 because of the gradient accumulation loop, but still fast enough)
 """
     ),
     code("# Recovery: only run this if a previous training cell was interrupted mid-tokenization.\n# !rm -f data/train.bin data/val.bin"),
-    code("!python -u train.py --max-iters 100 --no-wandb"),
+    code("!python -u train.py --max-iters 100 --batch-size 16 --grad-accum-steps 4 --no-wandb"),
     md(
         """\
-## 5. Full training (~83 min on T4)
+## 5. Full training (~2 hours on Colab T4)
 
 This runs the canonical 10000-step training with FP16 AMP + cosine LR schedule. Final val PPL should be around 4.7.
 
-> ⏱️ **Expected timing**: ~83 min (assuming the smoke test above already produced the cached `.bin` files; otherwise add ~3–5 min for tokenization).
+Same Colab-safe config as the smoke test (`--batch-size 16 --grad-accum-steps 4`) — effective batch 64, just smaller per-step VRAM footprint.
+
+> ⏱️ **Expected timing**: ~2 hours on Colab free T4 (vs. 83 min on a high-VRAM local GPU at batch=64). The increase is purely from gradient accumulation overhead; final model quality is the same.
 >
-> 💡 If you don't want to wait the full 83 min, **skip this cell** — the smoke test alone produced a `ckpt_step100.pt` you can use for the inference cells below (output quality will be much weaker, but the pipeline works end-to-end).
+> 💡 If you don't want to wait the full 2 hours, **skip this cell** — the smoke test alone produced a `ckpt_step100.pt` you can use for the inference cells below (output quality will be much weaker, but the pipeline works end-to-end).
 >
 > 💡 To use Weights & Biases, drop `--no-wandb` and run `wandb login` first (you'll need a free account at https://wandb.ai).
+>
+> 💡 If you have access to Colab Pro / Pro+ (A100 / V100, 40 GB+ VRAM), drop the `--batch-size` and `--grad-accum-steps` flags to use the default batch=64 → ~80 min wall-clock instead.
 """
     ),
-    code("!python -u train.py --no-wandb"),
+    code("!python -u train.py --batch-size 16 --grad-accum-steps 4 --no-wandb"),
     md(
         """\
 ## 6. Generate text
