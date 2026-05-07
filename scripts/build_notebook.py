@@ -90,11 +90,15 @@ The script downloads `TinyStoriesV2-GPT4-train.txt` (~2 GB) and `TinyStoriesV2-G
     code("!bash scripts/download_data.sh"),
     md(
         """\
-## 4. Smoke test (~5 min total: 3–5 min tokenize + 1 min train)
+## 4. Smoke test (~20 min on first run; ~5 min after that)
 
-> ⏱️ **Expected timing**: this cell takes ~5 minutes the **first** time. Most of it is **one-time corpus tokenization** (encoding ~2 GB of text into `data/train.bin`). After this cell finishes once, the `.bin` files are cached and subsequent training runs skip straight to step 0.
+> ⏱️ **First run timing on Colab free** (2 vCPUs):
+> - **~15–20 min**: one-time corpus tokenization (encoding ~2 GB train + 20 MB val into `data/{train,val}.bin`). The fast Rust tokenizer maxes out at ~2 MB/s per core, so a dual-core Colab takes 15–20 min for the train file.
+> - **~3–5 min**: 100 training steps with `batch=16 × grad_accum=4` (effective batch 64).
 >
-> ⚠️ **Do NOT click the stop button** during the "Encoding train corpus" stage even if it looks frozen for a few minutes — the `tqdm` progress bar updates in real time once Python flushes its buffer (the `-u` flag below makes this happen).
+> **Subsequent runs** skip tokenization entirely (cached `.bin` files), so you only pay the ~3–5 min training cost.
+>
+> ⚠️ **Do NOT click the stop button** during the "Encoding train corpus" stage even if it looks frozen — `-u` below ensures `tqdm` progress shows in real time. If progress bar shows >1 MB/s and ETA decreasing, it's working.
 >
 > If you already interrupted a previous run, the `.bin` files may be partially written and corrupt. Clear them with the recovery cell right below before retrying.
 
