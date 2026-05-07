@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import os
 from pathlib import Path
 
@@ -45,6 +46,11 @@ def get_fast_tokenizer() -> Tokenizer:
     return Tokenizer.from_pretrained("gpt2")
 
 
+# Read the source file in 64 MB blocks. Sized to give tqdm enough granularity on
+# multi-GB corpora while keeping peak RAM bounded by a small constant.
+_READ_BYTES = 64 * 1024 * 1024
+
+
 def prepare_data(
     input_path: str | os.PathLike,
     output_path: str | os.PathLike,
@@ -58,6 +64,11 @@ def prepare_data(
     is BPE-encoded and a single EOT token id is appended after it, so the model
     sees an explicit story boundary. The id stream is written as raw uint16
     (load it later via `load_tokens`).
+
+    Streams the source file in 64 MB blocks rather than loading the whole corpus
+    into memory. Peak RAM stays under ~200 MB even on the 2 GB TinyStories train
+    split — this matters on Colab free tier (~12 GB RAM) where the previous
+    load-all approach OOM-killed the kernel during the initial tokenization.
 
     `tokenizer` may be:
       - None             → loads the fast Rust tokenizer (default; recommended)
@@ -73,38 +84,73 @@ def prepare_data(
     is_fast = hasattr(tokenizer, "encode_batch")
     eot_id = GPT2_EOT_ID if is_fast else tokenizer.eos_token_id
 
-    with open(input_path, encoding="utf-8") as f:
-        text = f.read()
-
-    stories = [s for s in (story.strip() for story in text.split(STORY_SEPARATOR)) if s]
-    del text  # free ~2x corpus size before allocating the encoded buffer
-
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    file_size = Path(input_path).stat().st_size
+    progress = (
+        tqdm(total=file_size, desc=f"Tokenizing {Path(input_path).name}", unit="B", unit_scale=True)
+        if show_progress
+        else None
+    )
+
+    # An incremental decoder protects against UTF-8 multi-byte sequences that
+    # straddle a read boundary — extremely unlikely on TinyStories (pure ASCII)
+    # but free correctness for other corpora.
+    decoder = codecs.getincrementaldecoder("utf-8")()
+
+    pending = ""              # tail from previous block: not yet followed by an EOT
+    story_buffer: list[str] = []
     total = 0
 
-    chunk_starts = range(0, len(stories), chunk_size)
-    if show_progress:
-        chunk_starts = tqdm(
-            chunk_starts, desc=f"Tokenizing {Path(input_path).name}", unit="batch"
-        )
+    def flush_buffer(fout) -> None:
+        nonlocal total
+        if not story_buffer:
+            return
+        buf: list[int] = []
+        if is_fast:
+            for enc in tokenizer.encode_batch(story_buffer):
+                buf.extend(enc.ids)
+                buf.append(eot_id)
+        else:
+            for story in story_buffer:
+                buf.extend(tokenizer.encode(story))
+                buf.append(eot_id)
+        arr = np.asarray(buf, dtype=TOKEN_DTYPE)
+        arr.tofile(fout)
+        total += arr.size
+        story_buffer.clear()
 
-    # Write tokens chunk-by-chunk so we never materialize the full encoded
-    # corpus in Python list form (would be ~14 GB for the 2 GB train file).
-    with open(output_path, "wb") as fout:
-        for start in chunk_starts:
-            batch = stories[start : start + chunk_size]
-            buf: list[int] = []
-            if is_fast:
-                for enc in tokenizer.encode_batch(batch):
-                    buf.extend(enc.ids)
-                    buf.append(eot_id)
-            else:
-                for story in batch:
-                    buf.extend(tokenizer.encode(story))
-                    buf.append(eot_id)
-            arr = np.asarray(buf, dtype=TOKEN_DTYPE)
-            arr.tofile(fout)
-            total += arr.size
+    with open(output_path, "wb") as fout, open(input_path, "rb") as fin:
+        while True:
+            raw = fin.read(_READ_BYTES)
+            if not raw:
+                tail = decoder.decode(b"", final=True)
+                if tail:
+                    pending += tail
+                break
+            if progress is not None:
+                progress.update(len(raw))
+
+            combined = pending + decoder.decode(raw)
+            parts = combined.split(STORY_SEPARATOR)
+            pending = parts[-1]   # last segment may still be incomplete
+
+            for story in parts[:-1]:
+                story = story.strip()
+                if not story:
+                    continue
+                story_buffer.append(story)
+                if len(story_buffer) >= chunk_size:
+                    flush_buffer(fout)
+
+        # Final story: corpus may not end with an EOT separator.
+        if pending.strip():
+            story_buffer.append(pending.strip())
+        flush_buffer(fout)
+
+    if progress is not None:
+        progress.close()
+
     return total
 
 

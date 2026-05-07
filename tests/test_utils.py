@@ -156,6 +156,48 @@ class TestFastTokenizer:
         arr = load_tokens(out)
         assert arr[-1] == GPT2_EOT_ID
 
+    def test_streaming_block_size_does_not_affect_output(
+        self, tmp_path: Path, fast_tokenizer, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Streaming refactor: output must be byte-identical regardless of how
+        # the input is chunked across reads. A 4-byte block forces almost every
+        # STORY_SEPARATOR (15 bytes) to straddle multiple reads, exercising the
+        # `pending` carry-over path. Without this test, a cross-block split
+        # bug would only manifest on multi-GB corpora.
+        import utils
+
+        inp = tmp_path / "raw.txt"
+        inp.write_text(
+            f"The quick brown fox jumps over the lazy dog.{STORY_SEPARATOR}"
+            f"A small dog barked twice in the morning.{STORY_SEPARATOR}"
+            f"Snow fell quietly on the rooftops at dusk.{STORY_SEPARATOR}",
+            encoding="utf-8",
+        )
+        out_default = tmp_path / "default.bin"
+        prepare_data(inp, out_default, tokenizer=fast_tokenizer)
+
+        monkeypatch.setattr(utils, "_READ_BYTES", 4)
+        out_tiny = tmp_path / "tiny.bin"
+        prepare_data(inp, out_tiny, tokenizer=fast_tokenizer)
+
+        assert np.array_equal(load_tokens(out_default), load_tokens(out_tiny))
+
+    def test_handles_corpus_without_trailing_separator(
+        self, tmp_path: Path, fast_tokenizer
+    ) -> None:
+        # If the source file ends mid-story (no final EOT), the trailing buffer
+        # must still be flushed as one final story. Otherwise the last story
+        # would be silently dropped.
+        inp = tmp_path / "raw.txt"
+        out = tmp_path / "out.bin"
+        inp.write_text(
+            f"Story one.{STORY_SEPARATOR}Story two without trailing separator.",
+            encoding="utf-8",
+        )
+        prepare_data(inp, out, tokenizer=fast_tokenizer)
+        arr = load_tokens(out)
+        assert int((arr == GPT2_EOT_ID).sum()) == 2
+
 
 @pytest.fixture
 def fake_tokens() -> np.ndarray:
