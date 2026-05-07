@@ -90,40 +90,57 @@ The script downloads `TinyStoriesV2-GPT4-train.txt` (~2 GB) and `TinyStoriesV2-G
     code("!bash scripts/download_data.sh"),
     md(
         """\
-## 4. Smoke test (100 steps, ~1 min)
+## 4. Smoke test (~5 min total: 3–5 min tokenize + 1 min train)
 
-The first run also tokenizes the corpus into `data/train.bin` / `data/val.bin` — that one-time prep takes ~3 min on a fast tokenizer. Subsequent runs reuse the cached `.bin` files.
+> ⏱️ **Expected timing**: this cell takes ~5 minutes the **first** time. Most of it is **one-time corpus tokenization** (encoding ~2 GB of text into `data/train.bin`). After this cell finishes once, the `.bin` files are cached and subsequent training runs skip straight to step 0.
+>
+> ⚠️ **Do NOT click the stop button** during the "Encoding train corpus" stage even if it looks frozen for a few minutes — the `tqdm` progress bar updates in real time once Python flushes its buffer (the `-u` flag below makes this happen).
+>
+> If you already interrupted a previous run, the `.bin` files may be partially written and corrupt. Clear them with the recovery cell right below before retrying.
 
 Watch for:
-- `loss` should drop from ~11 (random init) toward ~7 within 100 steps
+- After tokenization: `loss` drops from ~11 (random init) toward ~7 within 100 steps
 - No `Non-finite loss` errors
 - Step time around 0.5 s on T4
 """
     ),
-    code("!python train.py --max-iters 100 --no-wandb"),
+    code("# Recovery: only run this if a previous training cell was interrupted mid-tokenization.\n# !rm -f data/train.bin data/val.bin"),
+    code("!python -u train.py --max-iters 100 --no-wandb"),
     md(
         """\
 ## 5. Full training (~83 min on T4)
 
 This runs the canonical 10000-step training with FP16 AMP + cosine LR schedule. Final val PPL should be around 4.7.
 
-> 💡 If you don't want to wait, **skip this cell** and use the pre-trained checkpoint by downloading it from the repo's GitHub Release (or just rely on the smoke test for a much weaker model).
+> ⏱️ **Expected timing**: ~83 min (assuming the smoke test above already produced the cached `.bin` files; otherwise add ~3–5 min for tokenization).
+>
+> 💡 If you don't want to wait the full 83 min, **skip this cell** — the smoke test alone produced a `ckpt_step100.pt` you can use for the inference cells below (output quality will be much weaker, but the pipeline works end-to-end).
 >
 > 💡 To use Weights & Biases, drop `--no-wandb` and run `wandb login` first (you'll need a free account at https://wandb.ai).
 """
     ),
-    code("!python train.py --no-wandb"),
+    code("!python -u train.py --no-wandb"),
     md(
         """\
 ## 6. Generate text
 
-After training, the latest checkpoint is at `checkpoints/ckpt_step10000.pt`. Try the four sampling modes:
+After training, checkpoints land in `checkpoints/ckpt_step{N}.pt`. The cell below auto-picks the highest-step checkpoint that actually exists, so you can run inference whether you finished the full training (10000) or stopped at the smoke test (100).
+"""
+    ),
+    code(
+        """\
+import glob, os, re
+
+ckpts = glob.glob("checkpoints/ckpt_step*.pt")
+assert ckpts, "No checkpoint found! Run the smoke test or full training first."
+CKPT = max(ckpts, key=lambda p: int(re.search(r"step(\\d+)", p).group(1)))
+print(f"Using checkpoint: {CKPT}")
 """
     ),
     code(
         """\
 # Greedy — deterministic, "safest" output
-!python generate.py --checkpoint checkpoints/ckpt_step10000.pt \\
+!python generate.py --checkpoint {CKPT} \\
     --prompt "Once upon a time" --max-new-tokens 200 \\
     --temperature 0.0 --seed 42
 """
@@ -131,7 +148,7 @@ After training, the latest checkpoint is at `checkpoints/ckpt_step10000.pt`. Try
     code(
         """\
 # Temperature 0.8 — recommended for narrative
-!python generate.py --checkpoint checkpoints/ckpt_step10000.pt \\
+!python generate.py --checkpoint {CKPT} \\
     --prompt "Once upon a time" --max-new-tokens 200 \\
     --temperature 0.8 --seed 42
 """
@@ -139,7 +156,7 @@ After training, the latest checkpoint is at `checkpoints/ckpt_step10000.pt`. Try
     code(
         """\
 # Top-p 0.9 nucleus sampling — adaptive cutoff
-!python generate.py --checkpoint checkpoints/ckpt_step10000.pt \\
+!python generate.py --checkpoint {CKPT} \\
     --prompt "Once upon a time" --max-new-tokens 200 \\
     --temperature 1.0 --top-p 0.9 --seed 42
 """
@@ -147,7 +164,7 @@ After training, the latest checkpoint is at `checkpoints/ckpt_step10000.pt`. Try
     code(
         """\
 # Try your own prompt
-!python generate.py --checkpoint checkpoints/ckpt_step10000.pt \\
+!python generate.py --checkpoint {CKPT} \\
     --prompt "The little dragon" --max-new-tokens 200 \\
     --temperature 0.8 --top-p 0.9 --seed 7
 """
