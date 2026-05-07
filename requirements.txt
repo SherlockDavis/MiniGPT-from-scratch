@@ -1,0 +1,8 @@
+torch>=2.0.0
+tokenizers>=0.15.0
+transformers>=4.30.0  # 仅用于加载 GPT2Tokenizer，不用其他模块
+datasets>=2.14.0
+wandb>=0.16.0
+numpy>=1.24.0
+tqdm>=4.65.0
+pytest>=7.4.0

@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model artifacts
+*.pt
+*.pth
+*.bin
+checkpoints/
+
+# Data
+data/
+*.tar.gz
+*.txt
+!requirements.txt
+!README*.txt
+
+# Logs / experiment tracking
+wandb/
+runs/
+logs/
+*.log
+# Keep the canonical 10000-step training log so plot_loss_curve.py is reproducible from a clone.
+!step11.log
+
+# Claude Code local overrides (personal, not shared)
+CLAUDE.local.md
+.claude/settings.local.json
+# Personal Claude Code workflow files — slash command templates and setup notes.
+diagnose-training.md
+implement-module.md
+test-module.md
+SETUP_README.md
+
+# OS
+.DS_Store
+Thumbs.db
